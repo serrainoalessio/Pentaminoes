@@ -26,50 +26,85 @@
 #define COLOR_13     "\033[48;5;232m"
 #define COLOR_14     "\033[48;5;232m"
 
-/*
-    piece id 0; X piece
-        +---+
-        |   |
-    +---+   +---+
-    |           |
-    +---+   +---+
-        |   |
-        +---+
+// -------------------------------------- GRAPHICAL OUTPUT ----------------------------
+#define COLORED_OUTPUT_BACKGROUND
 
-    piece id: 1; I piece
-    +-------------------+
-    |                   |
-    +-------------------+
+// NORMAL MODE
 
-    piece id 2; Z piece
-    +-------+
-    |       |
-    +---+   |
-        |   |
-        |   +---+
-        |       |
-        +-------+
+#define CELL_WIDTH  3
+#define CELL_HEIGHT 1
+#define CENTERS         " "
+#define HBAR            "─"
+#define HNBAR           " "
+#define VBAR            "│"
+#define VNBAR           " "
+#define CROSS_DOWNLEFT  "┐"
+#define CROSS_DOWNRIGHT "┌"
+#define CROSS_UPLEFT    "┘"
+#define CROSS_UPRIGHT   "└"
+#define CROSS_UPDOWN    "│"
+#define CROSS_LEFTRIGHT "─"
+#define CROSS_UPDOWNLEFT "┤"
+#define CROSS_UPDOWNRIGHT "├"
+#define CROSS_LEFTRIGHTUP  "┴"
+#define CROSS_LEFTRIGHTDOWN "┬"
+#define CROSS_UDLR      "┼" // up, down, left and right
+#define CROSS_NONE      " " // No cross !
 
-    piece id: 3; T piece
-    +-----------+
-    |           |
-    +---+   +---+
-        |   |
-        |   |
-        |   |
-        +---+
 
-    piece id: ; F piece
-        +-------+
-        |       |
-    +---+   +---+
-    |       |
-    +---+   |
-        |   |
-        +---+
+#ifdef COLORED_OUTPUT_BACKGROUND
+    #define CENTER_PRINT_COLOR(i)  print_color(i+1)
+    #define CENTER_CLEAR_COLOR()   print_color(0)
+    #define HBAR_PRINT_COLOR(i, j)  print_color(-1)
+    #define HBAR_CLEAR_COLOR()      print_color(0)
+    #define VBAR_PRINT_COLOR(i, j)  print_color(-1)
+    #define VBAR_CLEAR_COLOR()      print_color(0)
+    #define HNBAR_PRINT_COLOR(i)  print_color(i+1)
+    #define HNBAR_CLEAR_COLOR()   print_color(0)
+    #define VNBAR_PRINT_COLOR(i)  print_color(i+1)
+    #define VNBAR_CLEAR_COLOR()   print_color(0)
+    #define CROSS_PRINT_COLOR(i, j, k, l)  if ( ((i) == (j)) && ((j) == (k)) && \
+                                                ((k) == (l))                 )  \
+                                                print_color(i+1);               \
+                                            else                                \
+                                                print_color(-1)
+    #define CROSS_CLEAR_COLOR()      print_color(0)
+    #define NCROSS_PRINT_COLOR(i)    print_color(i+1)
+    #define NCROSS_CLEAR_COLOR()     print_color(0)
+#else
+    #define CENTER_PRINT_COLOR(i)  // Do nothing
+    #define CENTER_CLEAR_COLOR()   // Do nothing
+    #define HBAR_PRINT_COLOR(i, j)  // Do nothing
+    #define HBAR_CLEAR_COLOR()      // Do nothing
+    #define VBAR_PRINT_COLOR(i, j)  // Do nothing
+    #define VBAR_CLEAR_COLOR()      // Do nothing
+    #define HNBAR_PRINT_COLOR(i)  // Do nothing
+    #define HNBAR_CLEAR_COLOR()   // Do nothing
+    #define VNBAR_PRINT_COLOR(i)  // Do nothing
+    #define VNBAR_CLEAR_COLOR()   // Do nothing
+    #define CROSS_PRINT_COLOR(i, j, k, l)  // Do nothing
+    #define CROSS_CLEAR_COLOR()      // Do nothing
+    #define NCROSS_PRINT_COLOR(i)    // Do nothing
+    #define NCROSS_CLEAR_COLOR()     // Do nothing
+#endif
 
-    piece id 2; L piece
-*/
+// prototypes:
+void rotate_piece(const uint8_t * piece, uint8_t *dest);
+void symmetrize_piece(const uint8_t * piece, uint8_t *dest);
+int enough_space(int x, int y, uint8_t *piece);
+int insert_piece(uint8_t* table, int x, int y, uint8_t* piece);
+int insert_wrap(uint8_t* table, int x, int y, uint8_t* piece);
+void rotate_piece_ncp(uint8_t * piece);
+void symmetrize_piece_ncp(uint8_t * piece);
+void printtable(const uint8_t * table);
+int hole_space(uint8_t * table, int x, int y);
+int holes(const uint8_t * table);
+void print_color(int id);
+int get_bit(const uint8_t * table, int x, int y);
+int print_solution(const uint8_t * rot, const uint8_t * coord);
+int check_four_piece(const uint8_t * table);
+int next(const uint8_t * table, int pos, uint8_t * rot, uint8_t * coord);
+
 
 const char * piecename[] = {"X", "I", "Z", "T", "U", "V", "W", "F", "N", "L", "P", "Y"};
 // Piece table
@@ -432,7 +467,7 @@ void symmetrize_piece_ncp(uint8_t * piece) {
     symmetrize_piece(piece, piece);
 }
 
-void printtable(uint8_t * table) {
+void printtable(const uint8_t * table) {
     int i, j;
     for (i = 0; i < 8; i++) {
         for (j = 7; j >= 0; j--) {
@@ -442,54 +477,46 @@ void printtable(uint8_t * table) {
     }
 }
 
+int hole_space(uint8_t * table, int x, int y) { // Returns the size of a hole
+    // Executes a recursive flood fill
+    int area = 0;
+    // up
+    if ((y != 0) && (!(table[y-1] & _BV(x)))) { // Adiacent hole
+        table[y-1] |= _BV(x);
+        area += (1 + hole_space(table, x, y-1));
+    }
+    // down
+    if ((y != 7) && (!(table[y+1] & _BV(x)))) { // Adiacent hole
+        table[y+1] |= _BV(x);
+        area += (1 + hole_space(table, x, y+1));
+    }
+    //left
+    if ((x != 0) && (!(table[y] & _BV(x-1)))) { // Adiacent hole
+        table[y] |= _BV(x-1);
+        area += (1 + hole_space(table, x-1, y));
+    }
+    // right
+    if ((x != 7) && (!(table[y] & _BV(x+1)))) { // Adiacent hole
+        table[y] |= _BV(x+1);
+        area += (1 + hole_space(table, x+1, y));
+    }
+    return area;
+}
+
 int holes(const uint8_t * table) {
-    int x, y;
-    for (x = 0; x < 8; x++) {
-        for (y = 0; y < 8; y++) {
-            if (!(table[y] & _BV(x))) { // found a whitespace, now if boundaries are 1 returns 0
-                if (y == 0) { // do not checks y - 1
-                    if (x == 0) { // Checks everything but x -1
-                        if ((table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    } else if (x == 7) { // checks everything but x+1
-                        if ((table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) ) // found a hole
-                            return 1;
-                    } else { // normal case
-                        if ((table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) && (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    }
-                } else if (y == 7) { // Do not check y + 1
-                    if (x == 0) { // Checks everything but x -1
-                        if ((table[y-1] & _BV(x)) &&
-                            (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    } else if (x == 7) { // checks everything but x+1
-                        if ((table[y-1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) ) // found a hole
-                            return 1;
-                    } else { // normal case
-                        if ((table[y-1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) && (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    }
-                } else {
-                    if (x == 0) { // Checks everything but x -1
-                        if ((table[y-1] & _BV(x)) && (table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    } else if (x == 7) { // checks everything but x+1
-                        if ((table[y-1] & _BV(x)) && (table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) ) // found a hole
-                            return 1;
-                    } else { // normal case
-                        if ((table[y-1] & _BV(x)) && (table[y+1] & _BV(x)) &&
-                            (table[y] & _BV(x-1)) && (table[y] & _BV(x+1)) ) // found a hole
-                            return 1;
-                    }
-                }
+    int x, y, area;
+    uint8_t copytable[8];
+
+    memcpy(copytable, table, 8*sizeof*copytable);
+    for (x = 0; x < 8; x++) { // for each row
+        for (y = 0; y < 8; y++) { // then for each column
+            if (!(copytable[y] & _BV(x))) { // found a whitespace
+                // now calculate the area, if it is 1, 2, or 3 modulo 5 returns 1
+                copytable[y] |= _BV(x); // Writes 1 in the table
+                area = 1 + hole_space(copytable, x, y);
+                area %= 5;
+                if ((area == 1) || (area == 2) || (area == 3))
+                    return 1; // Impossible to solve
             }
         }
     }
@@ -533,71 +560,13 @@ int get_bit(const uint8_t * table, int x, int y) {
     return !!(table[y] & _BV(x));
 }
 
-#define COLORED_OUTPUT_BACKGROUND
-
-#define CELL_WIDTH  3
-#define CELL_HEIGHT 1
-#define CENTERS         " "
-#define HBAR            "-"
-#define HNBAR           " "
-#define VBAR            "|"
-#define VNBAR           " "
-#define CROSS_DOWNLEFT  "."
-#define CROSS_DOWNRIGHT "."
-#define CROSS_UPLEFT    "\'"
-#define CROSS_UPRIGHT   "\'"
-#define CROSS_UPDOWN    "|"
-#define CROSS_LEFTRIGHT "-"
-#define CROSS_UPDOWNLEFT "+"
-#define CROSS_UPDOWNRIGHT "+"
-#define CROSS_LEFTRIGHTUP  "+"
-#define CROSS_LEFTRIGHTDOWN "+"
-#define CROSS_UDLR      "+" // up, down, left and right
-#define CROSS_NONE      " " // No cross !
-
-#ifdef COLORED_OUTPUT_BACKGROUND
-    #define CENTER_PRINT_COLOR(i)  print_color(i+1)
-    #define CENTER_CLEAR_COLOR()   print_color(0)
-    #define HBAR_PRINT_COLOR(i, j)  print_color(-1)
-    #define HBAR_CLEAR_COLOR()      print_color(0)
-    #define VBAR_PRINT_COLOR(i, j)  print_color(-1)
-    #define VBAR_CLEAR_COLOR()      print_color(0)
-    #define HNBAR_PRINT_COLOR(i)  print_color(i+1)
-    #define HNBAR_CLEAR_COLOR()   print_color(0)
-    #define VNBAR_PRINT_COLOR(i)  print_color(i+1)
-    #define VNBAR_CLEAR_COLOR()   print_color(0)
-    #define CROSS_PRINT_COLOR(i, j, k, l)  if ( ((i) == (j)) && ((j) == (k)) && \
-                                                ((k) == (l))                 )  \
-                                                print_color(i+1);               \
-                                            else                                \
-                                                print_color(-1)
-    #define CROSS_CLEAR_COLOR()      print_color(0)
-    #define NCROSS_PRINT_COLOR(i)    print_color(i+1)
-    #define NCROSS_CLEAR_COLOR()     print_color(0)
-#else
-    #define CENTER_PRINT_COLOR(i)  // Do nothing
-    #define CENTER_CLEAR_COLOR()   // Do nothing
-    #define HBAR_PRINT_COLOR(i, j)  // Do nothing
-    #define HBAR_CLEAR_COLOR()      // Do nothing
-    #define VBAR_PRINT_COLOR(i, j)  // Do nothing
-    #define VBAR_CLEAR_COLOR()      // Do nothing
-    #define HNBAR_PRINT_COLOR(i)  // Do nothing
-    #define HNBAR_CLEAR_COLOR()   // Do nothing
-    #define VNBAR_PRINT_COLOR(i)  // Do nothing
-    #define VNBAR_CLEAR_COLOR()   // Do nothing
-    #define CROSS_PRINT_COLOR(i, j, k, l)  // Do nothing
-    #define CROSS_CLEAR_COLOR()      // Do nothing
-    #define NCROSS_PRINT_COLOR(i)    // Do nothing
-    #define NCROSS_CLEAR_COLOR()     // Do nothing
-#endif
-
 int print_solution(const uint8_t * rot, const uint8_t * coord) {
     int x, y, y1, i, j, k, l;
     uint8_t ptable[12*8];
     uint8_t temp_table[5];
     static int idsolution = 0;
 
-    printf("Solution number: %d\n", idsolution++);
+    printf("#%d#\n", idsolution++);
     // Print the solution
     for (i = 0; i < 12; i++) {
         memcpy(temp_table, piece_table[i], 5*sizeof*temp_table);
@@ -886,8 +855,26 @@ int print_solution(const uint8_t * rot, const uint8_t * coord) {
         printf("\n");
     }
     */
+
     return 0;
 }
+
+int check_four_piece(const uint8_t * table){ // checks if white spaces form a square
+    // from the up left start searching the first whitespace.
+    int x, y; // 0 counter
+    for (y = 0; y < 7; y++) {
+        for (x = 0; x < 7; x++) {
+            if (!(table[y] & _BV(x))) { // Found the first 0
+                // Now the other whitespaces must be in a very specific position:
+                if ((table[y+1] & _BV(x)) || (table[y] & _BV(x+1)) || (table[y+1] & _BV(x+1)))
+                    return 0; // if one of these bits is one then there is not a little square hole
+                else
+                    return 1; // holes are in the correct way
+            }
+        }
+    }
+    return 0; // if not found zeros means they are all in the 8th row or column, but in this case
+}             // there is no possibilities to have the square hole
 
 int next(const uint8_t * table, int pos, uint8_t * rot, uint8_t * coord) {
     int x, y, solutions = 0;
@@ -895,20 +882,28 @@ int next(const uint8_t * table, int pos, uint8_t * rot, uint8_t * coord) {
     uint8_t tpos[5]; // temporany pentamino, rotated
 
     if (pos == 12) { // FOUND A SOLUTION !!!!
-        print_solution(rot, coord);
-        printf("\n");
-        return 1;
+        if (check_four_piece(table)) { // This is a real solution!
+            print_solution(rot, coord);
+            return 1;
+        } else { // Piece matches, but they not form a little square hole
+            return 0;
+        }
     } else {
         if (holes(table)) // impossible case to solve
             return 0;
         for (x = 0; x < 8; x++)
         for (y = 0; y < 8; y++) {
+            // first check there is a free space
+            if (table[y] & _BV(x)) // if x-th bit in the y-th row is 1
+                continue; // try another solution, don't waste time executing the algorithm
             memcpy(tpos, piece_table[pos], 5*sizeof*tpos); // copies the data in a temporany mem space
             memcpy(exec_table, table, 8*sizeof*exec_table); // resets data
             coord[pos] = (x << 4) | (y);
             if (pos == 0) { // Cross, does not have to compute rotations and symmetries
-                if ((x > 4) || (y > 4))
+                if ((x >= 4) || (y >= 4))
                     continue; // All other cases can be reached by rotation
+                if (x > y) // Avoid diagonal simmetry
+                    continue;
                 if (insert_wrap(exec_table, x, y, tpos)) {
                     rot[pos] = 0; // no rotations
                     solutions += next(exec_table, pos+1, rot, coord); // recursive call
@@ -939,13 +934,13 @@ int next(const uint8_t * table, int pos, uint8_t * rot, uint8_t * coord) {
                 // now have to compute simmetries
                 symmetrize_piece_ncp(tpos);
                 if (insert_wrap(exec_table, x, y, tpos)) { // try to insert in the table
-                    rot[pos] = 4; // 90° rotation + symmetry
+                    rot[pos] = 5; // 90° rotation + symmetry
                     solutions += next(exec_table, pos+1, rot, coord); // recursive call
                     memcpy(exec_table, table, 8*sizeof*exec_table); // resets data
                 }
                 rotate_piece_ncp(tpos);
                 if (insert_wrap(exec_table, x, y, tpos)) { // try to insert in the table
-                    rot[pos] = 7; // 0° rotation + simmetry
+                    rot[pos] = 4; // 0° rotation + simmetry
                     solutions += next(exec_table, pos+1, rot, coord); // recursive call
                 }
             } else if (pos < 7) { // 4 cases all reachable with rotations
